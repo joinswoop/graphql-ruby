@@ -38,9 +38,21 @@ module GraphQL
       end
     end
 
-    TYPE_CLASSES.each do |type_class|
-      refine type_class.singleton_class do
-        include Methods
+    # Use import_methods instead of include in refinements if available.
+    # Ruby 3.1 deprecate the use of include/prepend inside refienements
+    # https://github.com/rmosolgo/graphql-ruby/pull/3674
+    # https://github.com/rmosolgo/graphql-ruby/commit/ddce9dc25f445c2f854e9fb015efc610af036f95
+    if defined?(::Refinement) && Refinement.private_method_defined?(:import_methods)
+      TYPE_CLASSES.each do |type_class|
+        refine type_class.singleton_class do
+          import_methods Methods
+        end
+      end
+    else
+      TYPE_CLASSES.each do |type_class|
+        refine type_class.singleton_class do
+          include Methods # rubocop:disable Lint/RefinementImportMethods
+        end
       end
     end
   end

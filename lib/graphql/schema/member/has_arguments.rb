@@ -156,6 +156,12 @@ module GraphQL
           end
         end
 
+        def all_argument_definitions
+          all_defns = own_arguments.values
+          all_defns.flatten!
+          all_defns
+        end
+
         def arguments_statically_coercible?
           if defined?(@arguments_statically_coercible) && !@arguments_statically_coercible.nil?
             @arguments_statically_coercible

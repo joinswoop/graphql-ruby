@@ -27,19 +27,14 @@ module GraphQL
         end
 
         def fetch(ast_node, argument_owner, parent_object)
-          # If any jobs were enqueued, run them now,
-          # since this might have been called outside of execution.
-          # (The jobs are responsible for updating `result` in-place.)
-          @dataloader.run_isolated do
-            @storage[ast_node][argument_owner][parent_object]
+          # This runs eagerly if no block is given
+          @storage[argument_owner][parent_object][ast_node] ||= begin
+            args_hash = self.class.prepare_args_hash(@query, ast_node)
+            kwarg_arguments = argument_owner.coerce_arguments(parent_object, args_hash, @query.context)
+            @query.after_lazy(kwarg_arguments) do |resolved_args|
+              @storage[argument_owner][parent_object][ast_node] = resolved_args
+            end
           end
-          # Ack, the _hash_ is updated, but the key is eventually
-          # overridden with an immutable arguments instance.
-          # The first call queues up the job,
-          # then this call fetches the result.
-          # TODO this should be better, find a solution
-          # that works with merging the runtime.rb code
-          @storage[ast_node][argument_owner][parent_object]
         end
 
         # @yield [Interpreter::Arguments, Lazy<Interpreter::Arguments>] The finally-loaded arguments

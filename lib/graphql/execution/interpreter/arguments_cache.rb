@@ -7,24 +7,23 @@ module GraphQL
         def initialize(query)
           @query = query
           @dataloader = query.context.dataloader
-          @storage = Hash.new do |h, ast_node|
-            h[ast_node] = Hash.new do |h2, arg_owner|
-              h2[arg_owner] = Hash.new do |h3, parent_object|
-                dataload_for(ast_node, arg_owner, parent_object) do |kwarg_arguments|
-                  h3[parent_object] = @query.schema.after_lazy(kwarg_arguments) do |resolved_args|
-                    h3[parent_object] = resolved_args
-                  end
-                end
-
-                if !h3.key?(parent_object)
-                  # TODO should i bother putting anything here?
-                  h3[parent_object] = NO_ARGUMENTS
-                else
-                  h3[parent_object]
-                end
+          @storage = Hash.new do |h, argument_owner|
+            args_by_parent = if argument_owner.arguments_statically_coercible?
+              shared_values_cache = {}
+              Hash.new do |h2, ignored_parent_object|
+                h2[ignored_parent_object] = shared_values_cache
+              end
+            else
+              Hash.new do |h2, parent_object|
+                args_by_node = {}
+                args_by_node.compare_by_identity
+                h2[parent_object] = args_by_node
               end
             end
+            args_by_parent.compare_by_identity
+            h[argument_owner] = args_by_parent
           end
+          @storage.compare_by_identity
         end
 
         def fetch(ast_node, argument_owner, parent_object)
@@ -46,8 +45,16 @@ module GraphQL
         # @yield [Interpreter::Arguments, Lazy<Interpreter::Arguments>] The finally-loaded arguments
         def dataload_for(ast_node, argument_owner, parent_object, &block)
           # First, normalize all AST or Ruby values to a plain Ruby hash
-          args_hash = self.class.prepare_args_hash(@query, ast_node)
-          argument_owner.coerce_arguments(parent_object, args_hash, @query.context, &block)
+          arg_storage = @storage[argument_owner][parent_object]
+          if (args = arg_storage[ast_node])
+            yield(args)
+          else
+            args_hash = self.class.prepare_args_hash(@query, ast_node)
+            argument_owner.coerce_arguments(parent_object, args_hash, @query.context) do |resolved_args|
+              arg_storage[ast_node] = resolved_args
+              yield(resolved_args)
+            end
+          end
           nil
         end
 

@@ -276,7 +276,7 @@ module GraphQL
         @ast_node = ast_node
         @method_conflict_warning = method_conflict_warning
         @legacy_edge_class = legacy_edge_class
-
+        @arguments_statically_coercible = nil
         arguments.each do |name, arg|
           if arg.is_a?(Hash)
             argument(name: name, **arg)
